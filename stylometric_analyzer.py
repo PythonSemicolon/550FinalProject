@@ -16,12 +16,51 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 import nltk
+import spacy
+from konlpy.tag import Mecab
 
 nltk.download('cmudict')
 nltk.download('stopwords')
 
 style.use("ggplot")
 cmuDictionary = None
+
+class StylometricAnalyzer:
+    def __init__(self, excerpt, language) -> None:
+        self.excerpt = excerpt
+        self.language = language
+    
+    # returns a list of sentences of the excerpt, each of which is a list of individual words
+    def parse_sentences(self) -> list(list(str)):
+        sentences = '.'.split(self.excerpt)
+
+        # will likely need to condition on language here, not all languages use spaces the same way
+        sentences = [' '.split(sentence) for sentence in sentences]
+        return sentences
+    
+    # returns a list of lemmatized tokens of the excerpt
+    def parse_tokens(self) -> list(str):
+
+        if self.language == 'ko':
+            mecab = Mecab()
+            tokens = mecab.pos(text)
+            
+            lemmatized_tokens = []
+            for token, pos in tokens:
+                # Add lemmatization logic here based on pos
+                lemmatized_tokens.append(token)
+
+        else:
+            if self.language == 'es':
+                lemmatize_model = spacy.load("es_core_news_sm")
+
+            if self.language == 'ru':
+                lemmatize_model = spacy.load("ru_core_news_sm")
+            
+            document = lemmatize_model(self.excerpt)
+            lemmatized_tokens = [token.lemma_ for token in document]
+        
+        return lemmatized_tokens
 
 
 # takes a paragraph of text and divides it into chunks of specified number of sentences
