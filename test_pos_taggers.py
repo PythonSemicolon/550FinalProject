@@ -8,7 +8,7 @@ example_es = "Tengo un bonito perro. Mi perro corre rápido."
 
 # https://huggingface.co/KoichiYasuoka/bert-base-russian-upos
 model_ru = esupar.load("KoichiYasuoka/bert-base-russian-upos")
-example_ru = "У меня есть красивая собака."
+example_ru = "Предположим, твои друзья придут к власти, Майкл; отчасти это неплохо, они бы выросли немного, а? Но что они смогли бы сделать? Могут ли они воспитать вкус народа?"
 
 # https://github.com/KoichiYasuoka/esupar
 model_ko = esupar.load("ko")
