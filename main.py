@@ -20,6 +20,3 @@
 
     # Save results in results_translator
 
-
-# TODO: Write function 'get_stylometric_features'
-# Note: Updated stylometric_analyzer.py to shorten the class
