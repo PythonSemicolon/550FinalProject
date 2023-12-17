@@ -1,106 +1,77 @@
-# taken from https://github.com/Hassaan-Elahi/Writing-Styles-Classification-Using-Stylometric-Analysis
+# inspired from https://github.com/Hassaan-Elahi/Writing-Styles-Classification-Using-Stylometric-Analysis
 
 import collections as coll
 import math
 import re
+import time
 import scipy as sc
 import numpy as np
 from matplotlib import style
-import nltk
 import spacy
-from konlpy.tag import Mecab
 import rusyllab
 import pylabeador
 from transformers import pipeline
 import esupar
 
-nltk.download('cmudict')
-nltk.download('stopwords')
-
-style.use("ggplot")
-cmuDictionary = None
-
 class StylometricAnalyzer:
     def __init__(self, excerpt, language) -> None:
-        self.excerpt = excerpt
+        start = time.time()
+        self.excerpt = excerpt.replace("\n", " ")  # \n caused issues with regex
         self.language = language
 
         # storing so no need to run multiple parses
         self.lemmas_with_punc = self.parse_tokens()
-        self.lemmas = [lemma for lemma in self.lemmas_with_punc if re.match('^[A-Za-z0-9]+$', lemma) is not None]
+
+        # strip punctuation
+        punc = r',.\'!¡";\?¿:;—-'
+        self.lemmas = list(filter(None, [lemma.strip(punc) for lemma in self.lemmas_with_punc]))
+
         # for syllable-related features, we don't want lemmatization
-        self.words = [word for word in self.parse_words() if re.match('^[A-Za-z0-9]+$', word) is not None]
+        self.words = list(filter(None, [word.strip(punc) for word in self.parse_words()]))
         self.sentences = self.parse_sentences()
 
         self.pos_tags = self.generate_pos_tags()
+
+        # print(f'constructor run in {time.time() - start} s.')
+
     
     # returns a list of sentences of the excerpt, each of which is a list of individual words
     def parse_sentences(self) -> list[list[str]]:
         # split sentences
         sentences = re.split(r'[.!?]', self.excerpt)
 
-        # parse words in sentences
-        sentences = [self.parse_words(sentence) for sentence in sentences]
+        # parse words in sentences, strip leading/trailing non-alphanumeric characters
+        sentences = [list(filter(None, [word.strip(r',.\'!¡";\?¿:;—-') for word in sentence.split(' ')])) for sentence in sentences]
 
-        if sentences[-1] == ['']: # remove empty sentence at end
+        if sentences[-1] == []: # remove empty sentence at end
             sentences.pop()
         
         return sentences
     
     # returns a list of words of the excerpt
-    def parse_words(self, excerpt=None) -> list[str]:
-        
-        if excerpt == None:
-            excerpt = self.excerpt
-        
-        if self.language == 'ko':
-            mecab = Mecab()
-            tokens = mecab.pos(excerpt)
-            
-            lemmatized_tokens = []
-            for token, pos in tokens:
-                lemmatized_tokens.append(token)
+    def parse_words(self) -> list[str]:
+        lemmatize_model = spacy.load(f"{self.language}_core_news_sm")
 
-        else:
-            if self.language == 'es':
-                lemmatize_model = spacy.load("es_core_news_sm")
-
-            if self.language == 'ru':
-                lemmatize_model = spacy.load("ru_core_news_sm")
-            
-            document = lemmatize_model(excerpt)
-            lemmatized_tokens = [token.text for token in document]
+        document = lemmatize_model(self.excerpt)
+        lemmatized_tokens = [token.text for token in document if token.text != ' ']
         
         return lemmatized_tokens
     
     # returns a list of lemmatized tokens of the excerpt
     def parse_tokens(self) -> list[str]:
+        lemmatize_model = spacy.load(f"{self.language}_core_news_sm")
 
-        if self.language == 'ko':
-            mecab = Mecab()
-            tokens = mecab.pos(self.excerpt)
-            
-            lemmatized_tokens = []
-            for token, pos in tokens:
-                lemmatized_tokens.append(token)
-
-        else:
-            if self.language == 'es':
-                lemmatize_model = spacy.load("es_core_news_sm")
-
-            if self.language == 'ru':
-                lemmatize_model = spacy.load("ru_core_news_sm")
-            
-            document = lemmatize_model(self.excerpt)
-            lemmatized_tokens = [token.lemma_ for token in document]
+        document = lemmatize_model(self.excerpt)
+        lemmatized_tokens = [token.lemma_ for token in document if token.lemma_ != ' ']
         
         return lemmatized_tokens
     
     # generates a list of POS tag count for 4 categories: nouns, verbs, adjectives, adverbs
     def generate_pos_tags(self):
+        start = time.time()
         if self.language == 'ru':
             # https://huggingface.co/KoichiYasuoka/bert-base-russian-upos
-            model = pipeline("token-classification", model="PlanTL-GOB-ES/roberta-large-bne-capitel-pos")
+            model = esupar.load("KoichiYasuoka/bert-base-russian-upos")
         
         if self.language == 'es':
             # https://huggingface.co/PlanTL-GOB-ES/roberta-large-bne-capitel-pos
@@ -110,13 +81,26 @@ class StylometricAnalyzer:
             # https://github.com/KoichiYasuoka/esupar
             model = esupar.load("ko")
         
-        pos_tags = {
-            'nouns': len([word for word in self.lemmas if model(word)[0]['entity'] == 'NOUN']),
-            'verbs': len([word for word in self.lemmas if model(word)[0]['entity'] == 'VERB']),
-            'adjectives': len([word for word in self.lemmas if model(word)[0]['entity'] == 'ADJ']),
-            'adverbs': len([word for word in self.lemmas if model(word)[0]['entity'] == 'ADV']),
-        }
+        pos_results = model(self.excerpt)
 
+        if self.language == 'es':
+            pos_tags = {
+                'nouns': len([word for word in pos_results if word['entity'] == 'NOUN']),
+                'verbs': len([word for word in pos_results if word['entity'] == 'VERB']),
+                'adjectives': len([word for word in pos_results if word['entity'] == 'ADJ']),
+                'adverbs': len([word for word in pos_results if word['entity'] == 'ADV']),
+            }
+        
+        else:
+            tag_values = pos_results.values[3]
+            pos_tags = {
+                'nouns': len([tag for tag in tag_values if tag == 'NOUN']),
+                'verbs': len([tag for tag in tag_values if tag == 'VERB']),
+                'adjectives': len([tag for tag in tag_values if tag == 'ADJ']),
+                'adverbs': len([tag for tag in tag_values if tag == 'ADV']),
+            }
+
+        # print(f'POS tags generated in {time.time() - start} s.')
         return pos_tags
 
 
@@ -297,7 +281,8 @@ class StylometricAnalyzer:
 
     # Return entire feature vector
     def get_feature_vector(self) -> list[float]:
-        return [
+        start = time.time()
+        fv = [
             self.get_average_sentence_length_words(),
             self.get_average_sentence_length_chars(),
             self.get_punctuation_ratio(),
@@ -319,3 +304,6 @@ class StylometricAnalyzer:
             self.get_adjective_density(),
             self.get_adverb_density()
         ]
+
+        # print(f'Feature vector generated in {time.time() - start} s.')
+        return fv
