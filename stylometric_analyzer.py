@@ -13,25 +13,48 @@ import pylabeador
 from transformers import pipeline
 import esupar
 
+
 class StylometricAnalyzer:
     def __init__(self, excerpt, language) -> None:
         start = time.time()
-        self.excerpt = excerpt.replace("\n", " ")  # \n caused issues with regex
+        self.count_syllable_fail = 0 # syllabification fail counts
+        self.excerpt = excerpt.replace("\n", " ").replace("\0", "").replace('\r', '')  # caused issues with regex
+        self.excerpt = re.sub(r'\b-\b', ' ', self.excerpt)
+        self.excerpt = re.sub(r'\b.\b', ' ', self.excerpt)
+        self.excerpt = re.sub(r'\b;\b', ' ', self.excerpt)
+        self.excerpt = re.sub(r'\b\[\b', ' ', self.excerpt)
+
         self.language = language
 
         # storing so no need to run multiple parses
         self.lemmas_with_punc = self.parse_tokens()
 
         # strip punctuation
-        punc = r',.\'!¡";\?¿:;—-'
-        self.lemmas = list(filter(None, [lemma.strip(punc) for lemma in self.lemmas_with_punc]))
+        punc = r',.\'!¡";\?¿:;—()-'
 
-        # for syllable-related features, we don't want lemmatization
-        self.words = list(filter(None, [word.strip(punc) for word in self.parse_words()]))
+        if self.language == 'ru':
+            # strip russian punctuation
+            punc += r'«»'
+            # only keep characters in Russian alphabet
+            self.lemmas = list(filter(None, [lemma.strip(punc) for lemma in self.lemmas_with_punc if re.match(r'[а-яА-Я]', lemma)]))
+            # Exclude punctuation from words
+            self.words = list(filter(None, [word.replace(punc, '') for word in self.parse_words() if re.match(r'[а-яА-Я]', word)]))
+
+        if self.language == 'es':
+            # only keep characters in Spanish alphabet
+            self.lemmas = list(filter(None, [lemma.strip(punc) for lemma in self.lemmas_with_punc if re.match(r'[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]', lemma)]))
+            self.words = list(filter(None, [word.replace(punc, '') for word in self.parse_words() if re.match(r'[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ]', word)]))
+
+        if self.language == 'ko':
+            # only keep characters in Korean alphabet
+            self.lemmas = list(filter(None, [lemma.strip(punc) for lemma in self.lemmas_with_punc if re.match(r'[ㄱ-ㅎㅏ-ㅣ가-힣]', lemma)]))
+            self.words = list(filter(None, [word.replace(punc, '') for word in self.parse_words() if re.match(r'[ㄱ-ㅎㅏ-ㅣ가-힣]', word)]))
+
+        # TODO : Print lemmas and words to see if they are correct
+
         self.sentences = self.parse_sentences()
-
         self.pos_tags = self.generate_pos_tags()
-
+        
         # print(f'constructor run in {time.time() - start} s.')
 
     
@@ -202,16 +225,21 @@ class StylometricAnalyzer:
     # Type 3: Readability features
 
     def count_syllables(self, word) -> int:
-        if self.language == 'ru':
-            return len(rusyllab.split_word(word))
-        if self.language == 'es':
-            return len(pylabeador.syllabify(word))
-        if self.language == 'ko':
-            return len(word) # korean characters represent syllables
+        try:
+            if self.language == 'ru':
+                return len(rusyllab.split_word(word))
+            if self.language == 'es':
+                return len(pylabeador.syllabify(word))
+            if self.language == 'ko':
+                return len(word) # korean characters represent syllables
+        except:
+            self.count_syllable_fail += 1 # increase by 1 if the syllable count fails
+            return 1 # if syllable count fails, return 1 as a default
     
     # Feature 12: Average number of syllables per word (readability)
     def get_average_syllables_per_word(self) -> float:
         words = self.words
+        print(f"self.words: {words}")
         return np.average([self.count_syllables(word) for word in words])
     
     # Feature 13: Flesch reading ease (readability)
