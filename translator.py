@@ -176,7 +176,7 @@ def main():
     print("Total syllable fail count: ", total_syllable_fail_count) # hoping that it doesn't fail more than 100-200 times.
 
     # Save data to files
-    with open('data/translators_short.json', 'w') as file:
+    with open('data/translators.json', 'w') as file:
         json.dump(translators_data, file, indent=2)
 
      
